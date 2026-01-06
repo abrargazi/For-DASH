@@ -397,6 +397,336 @@ def send_notification():
     
     return jsonify({'status': 'success'})
 
+@socketio.on('leave_chat')
+def on_leave_chat(data):
+    room = data['room']
+    leave_room(room)
+    emit('status', {'msg': f'{current_user.username} left the chat'}, room=room)
+
+@socketio.on('send_message')
+def on_send_message(data):
+    room = data['room']
+    message = data['message']
+    
+    # Save message to database
+    chat_message = ChatMessage(
+        sender_id=current_user.id,
+        room_id=room,
+        message=message
+    )
+    db.session.add(chat_message)
+    db.session.commit()
+    
+    emit('new_message', {
+        'id': chat_message.id,
+        'sender': current_user.username,
+        'message': message,
+        'timestamp': chat_message.created_at.isoformat()
+    }, room=room)
+
+# AI Chat Assistant
+@app.route('/api/ai_chat', methods=['POST'])
+@login_required
+def ai_chat():
+    data = request.get_json()
+    user_message = data.get('message', '')
+    
+    # Simple AI responses for emergency queries
+    emergency_keywords = ['emergency', 'help', 'sos', 'danger', 'fire', 'flood', 'earthquake', 'medical']
+    
+    if any(keyword in user_message.lower() for keyword in emergency_keywords):
+        response = "This appears to be an emergency. Please use the SOS button immediately or call emergency services. For immediate help, use the SOS feature in the app."
+    else:
+        response = "I'm here to help with disaster assistance information. How can I assist you today?"
+    
+    return jsonify({'response': response})
+
+# Bulletin Board Route
+@app.route('/bulletin')
+@login_required
+def bulletin_board():
+    posts = BulletinPost.query.order_by(BulletinPost.created_at.desc()).all()
+    return render_template('bulletin_board.html', posts=posts)
+
+# All Requests Route for Rescue Teams
+@app.route('/all_requests')
+@login_required
+def all_requests():
+    if current_user.user_type != 'rescue_team':
+        return redirect(url_for('dashboard'))
+    
+    # Get all help requests
+    all_help_requests = HelpRequest.query.order_by(HelpRequest.created_at.desc()).all()
+    
+    return render_template('all_requests.html', requests=all_help_requests)
+
+# Create Bulletin Post Route
+@app.route('/api/create_bulletin', methods=['POST'])
+@login_required
+def create_bulletin():
+    if current_user.user_type != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'})
+    
+    data = request.get_json()
+    post = BulletinPost(
+        author_id=current_user.id,
+        title=data.get('title'),
+        content=data.get('content'),
+        post_type=data.get('post_type'),
+        priority=data.get('priority')
+    )
+    db.session.add(post)
+    db.session.commit()
+    
+    # Send real-time update to all users
+    socketio.emit('new_bulletin_post', {
+        'id': post.id,
+        'title': post.title,
+        'content': post.content,
+        'post_type': post.post_type,
+        'priority': post.priority,
+        'author': current_user.username,
+        'timestamp': post.created_at.isoformat()
+    })
+    
+    return jsonify({'status': 'success', 'post_id': post.id})
+
+# Send Notification Route
+@app.route('/api/send_notification', methods=['POST'])
+@login_required
+def send_notification():
+    if current_user.user_type != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'})
+    
+    data = request.get_json()
+    target = data.get('target', 'all')
+    
+    # Determine target users
+    if target == 'all':
+        users = User.query.all()
+    elif target == 'users':
+        users = User.query.filter_by(user_type='user').all()
+    elif target == 'rescue_teams':
+        users = User.query.filter_by(user_type='rescue_team').all()
+    else:
+        users = User.query.all()
+    
+    # Create notifications for all target users
+    for user in users:
+        notification = Notification(
+            user_id=user.id,
+            title=data.get('title'),
+            message=data.get('message'),
+            notification_type=data.get('notification_type')
+        )
+        db.session.add(notification)
+    
+    db.session.commit()
+    
+    # Send real-time notification to all target users
+    socketio.emit('new_notification', {
+        'title': data.get('title'),
+        'message': data.get('message'),
+        'notification_type': data.get('notification_type'),
+        'timestamp': datetime.now().isoformat()
+    })
+    
+    return jsonify({'status': 'success'})
+
+# Export Data Route
+@app.route('/api/export_data')
+@login_required
+def export_data():
+    if current_user.user_type != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'})
+    
+    # Get all data for export
+    users = User.query.all()
+    sos_alerts = SOSAlert.query.all()
+    help_requests = HelpRequest.query.all()
+    resource_offers = ResourceOffer.query.all()
+    bulletin_posts = BulletinPost.query.all()
+    
+    # Create PDF export
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib import colors
+    from io import BytesIO
+    import base64
+    
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    styles = getSampleStyleSheet()
+    story = []
+    
+    # Title
+    title = Paragraph("DASH System Export Report", styles['Title'])
+    story.append(title)
+    story.append(Spacer(1, 20))
+    
+    # Users table
+    story.append(Paragraph("Users", styles['Heading2']))
+    user_data = [['ID', 'Username', 'Email', 'Type', 'Created']]
+    for user in users:
+        user_data.append([str(user.id), user.username, user.email, user.user_type, user.created_at.strftime('%Y-%m-%d')])
+    
+    user_table = Table(user_data)
+    user_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 14),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    story.append(user_table)
+    story.append(Spacer(1, 20))
+    
+    # SOS Alerts table
+    story.append(Paragraph("SOS Alerts", styles['Heading2']))
+    sos_data = [['ID', 'User', 'Status', 'Created']]
+    for alert in sos_alerts:
+        sos_data.append([str(alert.id), alert.user.username, alert.status, alert.created_at.strftime('%Y-%m-%d %H:%M')])
+    
+    sos_table = Table(sos_data)
+    sos_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 14),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    story.append(sos_table)
+    story.append(Spacer(1, 20))
+    
+    # Help Requests table
+    story.append(Paragraph("Help Requests", styles['Heading2']))
+    request_data = [['ID', 'User', 'Type', 'Urgency', 'Status', 'Created']]
+    for req in help_requests:
+        request_data.append([str(req.id), req.user.username, req.request_type, req.urgency_level, req.status, req.created_at.strftime('%Y-%m-%d %H:%M')])
+    
+    request_table = Table(request_data)
+    request_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 14),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    story.append(request_table)
+    
+    doc.build(story)
+    buffer.seek(0)
+    
+    # Return PDF as base64
+    pdf_data = base64.b64encode(buffer.getvalue()).decode()
+    return jsonify({'status': 'success', 'pdf_data': pdf_data})
+
+# User Management Route
+@app.route('/manage_users')
+@login_required
+def manage_users():
+    if current_user.user_type != 'admin':
+        return redirect(url_for('dashboard'))
+    
+    # Get all users
+    all_users = User.query.order_by(User.created_at.desc()).all()
+    
+    return render_template('manage_users.html', users=all_users)
+
+# Respond to SOS Route
+@app.route('/api/respond_sos/<int:sos_id>', methods=['POST'])
+@login_required
+def respond_sos(sos_id):
+    if current_user.user_type != 'rescue_team':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'})
+    
+    sos_alert = SOSAlert.query.get_or_404(sos_id)
+    sos_alert.status = 'responded'
+    db.session.commit()
+    
+    return jsonify({'status': 'success'})
+
+# Assign Request Route
+@app.route('/api/assign_request/<int:request_id>', methods=['POST'])
+@login_required
+def assign_request(request_id):
+    if current_user.user_type != 'rescue_team':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'})
+    
+    help_request = HelpRequest.query.get_or_404(request_id)
+    help_request.status = 'in_progress'
+    db.session.commit()
+    
+    return jsonify({'status': 'success'})
+
+# Update Request Status Route
+@app.route('/api/update_request_status/<int:request_id>', methods=['POST'])
+@login_required
+def update_request_status(request_id):
+    if current_user.user_type not in ['rescue_team', 'admin']:
+        return jsonify({'status': 'error', 'message': 'Unauthorized'})
+    
+    data = request.get_json()
+    help_request = HelpRequest.query.get_or_404(request_id)
+    help_request.status = data.get('status')
+    db.session.commit()
+    
+    return jsonify({'status': 'success'})
+
+# Get User Details API
+@app.route('/api/user_details/<int:user_id>')
+@login_required
+def get_user_details(user_id):
+    if current_user.user_type != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'})
+    
+    user = User.query.get_or_404(user_id)
+    
+    # Get user's activity
+    sos_alerts = SOSAlert.query.filter_by(user_id=user_id).order_by(SOSAlert.created_at.desc()).limit(5).all()
+    help_requests = HelpRequest.query.filter_by(user_id=user_id).order_by(HelpRequest.created_at.desc()).limit(5).all()
+    resource_offers = ResourceOffer.query.filter_by(user_id=user_id).order_by(ResourceOffer.created_at.desc()).limit(5).all()
+    
+    return jsonify({
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'user_type': user.user_type,
+            'phone': user.phone,
+            'is_online': user.is_online,
+            'created_at': user.created_at.isoformat()
+        },
+        'sos_alerts': [{
+            'id': alert.id,
+            'message': alert.message,
+            'status': alert.status,
+            'created_at': alert.created_at.isoformat()
+        } for alert in sos_alerts],
+        'help_requests': [{
+            'id': req.id,
+            'request_type': req.request_type,
+            'urgency_level': req.urgency_level,
+            'status': req.status,
+            'created_at': req.created_at.isoformat()
+        } for req in help_requests],
+        'resource_offers': [{
+            'id': offer.id,
+            'resource_type': offer.resource_type,
+            'is_available': offer.is_available,
+            'created_at': offer.created_at.isoformat()
+        } for offer in resource_offers]
+    })
 
 
 if __name__ == '__main__':
