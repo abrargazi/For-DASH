@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}DASH - Disaster Assistance & Support Hub{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<div class="hero-section bg-gradient text-white py-5 mb-5" style="background: linear-gradient(135deg, var(--primary-red), var(--accent-red));">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-lg-6">
+                <h1 class="display-4 fw-bold mb-4">
+                    <i class="fas fa-shield-alt me-3"></i>DASH
+                </h1>
+                <h2 class="h3 mb-4">Disaster Assistance & Support Hub</h2>
+                <p class="lead mb-4">
+                    Your lifeline during emergencies. Real-time location tracking, emergency alerts, 
+                    resource sharing, and community support - all in one place.
+                </p>
+                <div class="d-flex gap-3">
+                    <a href="{{ url_for('register') }}" class="btn btn-light btn-lg">
+                        <i class="fas fa-user-plus me-2"></i>Get Started
+                    </a>
+                    <a href="{{ url_for('login') }}" class="btn btn-outline-light btn-lg">
+                        <i class="fas fa-sign-in-alt me-2"></i>Login
+                    </a>
+                </div>
+            </div>
+            <div class="col-lg-6 text-center">
+                <i class="fas fa-helicopter" style="font-size: 8rem; opacity: 0.8;"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Features Section -->
+<div class="container">
+    <div class="row mb-5">
+        <div class="col-12 text-center">
+            <h2 class="display-5 fw-bold text-primary mb-4">Core Features</h2>
+            <p class="lead text-muted">Everything you need for emergency response and community support</p>
+        </div>
+    </div>
+    
+    <div class="row g-4">
+        <!-- Real-Time Location Tracking -->
+        <div class="col-lg-4 col-md-6">
+            <div class="card h-100 fade-in">
+                <div class="card-body text-center p-4">
+                    <div class="feature-icon mb-3">
+                        <i class="fas fa-map-marker-alt text-primary" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="card-title">Real-Time Location Tracking</h5>
+                    <p class="card-text">
+                        Detect and display user's current location on a map. Highlight disaster-affected zones and safe zones for better navigation.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Emergency SOS Button -->
+        <div class="col-lg-4 col-md-6">
+            <div class="card h-100 fade-in">
+                <div class="card-body text-center p-4">
+                    <div class="feature-icon mb-3">
+                        <i class="fas fa-exclamation-triangle text-danger" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="card-title">Emergency SOS Button</h5>
+                    <p class="card-text">
+                        One-tap alert to notify nearby volunteers and rescuers. Automatically sends GPS location and user details.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Help Request System -->
+        <div class="col-lg-4 col-md-6">
+            <div class="card h-100 fade-in">
+                <div class="card-body text-center p-4">
+                    <div class="feature-icon mb-3">
+                        <i class="fas fa-hands-helping text-success" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="card-title">Help Request System</h5>
+                    <p class="card-text">
+                        Request or donate food, shelter, water, medical help, or evacuation. Auto-match with nearby available resources.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resource Sharing Portal -->
+        <div class="col-lg-4 col-md-6">
+            <div class="card h-100 fade-in">
+                <div class="card-body text-center p-4">
+                    <div class="feature-icon mb-3">
+                        <i class="fas fa-share-alt text-info" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="card-title">Resource Sharing Portal</h5>
+                    <p class="card-text">
+                        Volunteers can offer shelter, food, transport, or supplies. Real-time availability shown on the map.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Chat Support -->
+        <div class="col-lg-4 col-md-6">
+            <div class="card h-100 fade-in">
+                <div class="card-body text-center p-4">
+                    <div class="feature-icon mb-3">
+                        <i class="fas fa-comments text-warning" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="card-title">Live Chat Support</h5>
+                    <p class="card-text">
+                        Direct messaging between helpers and victims. Optional AI chat assistant for emergency queries.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Community Bulletin Board -->
+        <div class="col-lg-4 col-md-6">
+            <div class="card h-100 fade-in">
+                <div class="card-body text-center p-4">
+                    <div class="feature-icon mb-3">
+                        <i class="fas fa-bullhorn text-primary" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="card-title">Community Bulletin Board</h5>
+                    <p class="card-text">
+                        Public updates, local announcements, and instructions from authorities. Stay informed with real-time updates.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Demo Accounts Section (Hidden with 3-dot toggle) -->
+<div class="container mt-5">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h4 class="fw-bold text-primary"><i class="fas fa-users me-2"></i>Demo Accounts</h4>
+        <div class="dropdown">
+            <button class="btn btn-light btn-sm" type="button" id="demoMenu" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-ellipsis-v"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="demoMenu">
+                <li>
+                    <a class="dropdown-item" href="#" onclick="toggleDemo()">Show / Hide Demo Accounts</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Hidden by default -->
+    <div id="demo-accounts" class="card d-none">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="demo-account p-3 border rounded">
+                        <h6 class="text-primary"><i class="fas fa-user-shield me-2"></i>Admin Account</h6>
+                        <p class="mb-1"><strong>Username:</strong> admin</p>
+                        <p class="mb-1"><strong>Password:</strong> admin123</p>
+                        <small class="text-muted">Full system access and analytics</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="demo-account p-3 border rounded">
+                        <h6 class="text-success"><i class="fas fa-user me-2"></i>User Account</h6>
+                        <p class="mb-1"><strong>Username:</strong> user1</p>
+                        <p class="mb-1"><strong>Password:</strong> user123</p>
+                        <small class="text-muted">Request help and access resources</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="demo-account p-3 border rounded">
+                        <h6 class="text-warning"><i class="fas fa-helicopter me-2"></i>Rescue Team</h6>
+                        <p class="mb-1"><strong>Username:</strong> rescue1</p>
+                        <p class="mb-1"><strong>Password:</strong> rescue123</p>
+                        <small class="text-muted">Respond to emergencies and manage missions</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Section -->
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-12 text-center mb-4">
+            <h3 class="fw-bold text-primary">Why Choose DASH?</h3>
+        </div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-3 col-md-6">
+            <div class="stat-card">
+                <div class="stat-number">
+                    <i class="fas fa-clock text-primary"></i>
+                </div>
+                <div class="stat-label">Real-Time Response</div>
+                <p class="small text-muted mt-2">Instant alerts and immediate response coordination</p>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="stat-card">
+                <div class="stat-number">
+                    <i class="fas fa-users text-success"></i>
+                </div>
+                <div class="stat-label">Community Driven</div>
+                <p class="small text-muted mt-2">Built by the community, for the community</p>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="stat-card">
+                <div class="stat-number">
+                    <i class="fas fa-shield-alt text-info"></i>
+                </div>
+                <div class="stat-label">Secure & Reliable</div>
+                <p class="small text-muted mt-2">Your safety and privacy are our top priority</p>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="stat-card">
+                <div class="stat-number">
+                    <i class="fas fa-mobile-alt text-warning"></i>
+                </div>
+                <div class="stat-label">Mobile Ready</div>
+                <p class="small text-muted mt-2">Access from any device, anywhere, anytime</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Call to Action -->
+<div class="container mt-5 mb-5">
+    <div class="row">
+        <div class="col-12">
+            <div class="card bg-primary text-white">
+                <div class="card-body text-center py-5">
+                    <h3 class="card-title mb-3">Ready to Make a Difference?</h3>
+                    <p class="card-text lead mb-4">
+                        Join DASH today and be part of a community that helps each other in times of need.
+                    </p>
+                    <a href="{{ url_for('register') }}" class="btn btn-light btn-lg me-3">
+                        <i class="fas fa-user-plus me-2"></i>Register Now
+                    </a>
+                    <a href="{{ url_for('login') }}" class="btn btn-outline-light btn-lg">
+                        <i class="fas fa-sign-in-alt me-2"></i>Login
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Add animation delay to feature cards
+    document.addEventListener('DOMContentLoaded', function() {
+        const cards = document.querySelectorAll('.fade-in');
+        cards.forEach((card, index) => {
+            card.style.animationDelay = `${index * 0.1}s`;
+        });
+    });
+
+    // Show/hide demo accounts
+    function toggleDemo() {
+        const demo = document.getElementById('demo-accounts');
+        demo.classList.toggle('d-none');
+    }
+</script>
+{% endblock %}
