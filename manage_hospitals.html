@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Hospitals - DASH{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col-12 d-flex justify-content-between align-items-center">
+            <h3><i class="fas fa-hospital me-2"></i>Hospital Directory</h3>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#hospitalModal" onclick="openHospitalModal()">
+                <i class="fas fa-plus me-1"></i>Add Hospital
+            </button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            {% if hospitals %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Capacity</th>
+                                <th>Doctors</th>
+                                <th>Contact</th>
+                                <th>Updated</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="hospitalTableBody">
+                            {% for hospital in hospitals %}
+                            <tr data-hospital='{{ hospital|tojson }}'>
+                                <td>
+                                    <strong>{{ hospital.name }}</strong><br>
+                                    <small class="text-muted">{{ hospital.address }}</small>
+                                </td>
+                                <td>{{ hospital.capacity_available }}/{{ hospital.capacity_total }}</td>
+                                <td>{{ hospital.doctors|length }}</td>
+                                <td>{{ hospital.contact_phone or 'N/A' }}</td>
+                                <td>{{ hospital.last_updated[:10] if hospital.last_updated }}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary me-1" onclick="editHospital(this)">
+                                        <i class="fas fa-pen"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteHospital({{ hospital.id }})">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-hospital fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">No hospitals yet. Add the first one.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="hospitalModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="hospitalModalTitle"><i class="fas fa-hospital me-2"></i>Add Hospital</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="hospitalForm">
+                    <input type="hidden" id="hospitalId">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Name</label>
+                            <input type="text" class="form-control" id="hospitalName" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Contact Phone</label>
+                            <input type="text" class="form-control" id="hospitalPhone">
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label">Address <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="hospitalAddress" required placeholder="e.g., 123 Main St, City, State, ZIP">
+                            <small class="text-muted">Location will be automatically determined from address</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Total Capacity</label>
+                            <input type="number" min="0" class="form-control" id="hospitalCapacityTotal" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Available Capacity</label>
+                            <input type="number" min="0" class="form-control" id="hospitalCapacityAvailable" required>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label">Doctors (name - specialty per line)</label>
+                            <textarea class="form-control" rows="3" id="hospitalDoctors" placeholder="Dr. Smith - Cardiologist&#10;Dr. Patel - Surgeon"></textarea>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label">Services</label>
+                            <input type="text" class="form-control" id="hospitalServices" placeholder="ICU, Trauma, Pediatrics">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-primary" onclick="submitHospital()">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let editingId = null;
+
+    function openHospitalModal() {
+        editingId = null;
+        document.getElementById('hospitalModalTitle').textContent = 'Add Hospital';
+        document.getElementById('hospitalForm').reset();
+        document.getElementById('hospitalId').value = '';
+    }
+
+    function serializeDoctors(text) {
+        return text.split('\n').filter(Boolean).map(line => {
+            const parts = line.split('-');
+            return {
+                name: parts[0].trim(),
+                specialty: (parts[1] || '').trim()
+            };
+        });
+    }
+
+    function editHospital(btn) {
+        const row = btn.closest('tr');
+        const data = JSON.parse(row.dataset.hospital);
+        editingId = data.id;
+        document.getElementById('hospitalModalTitle').textContent = 'Edit Hospital';
+        document.getElementById('hospitalId').value = data.id;
+        document.getElementById('hospitalName').value = data.name || '';
+        document.getElementById('hospitalPhone').value = data.contact_phone || '';
+        document.getElementById('hospitalAddress').value = data.address || '';
+        document.getElementById('hospitalCapacityTotal').value = data.capacity_total;
+        document.getElementById('hospitalCapacityAvailable').value = data.capacity_available;
+        document.getElementById('hospitalServices').value = data.services || '';
+        const doctorLines = (data.doctors || []).map(d => `${d.name} - ${d.specialty}`).join('\\n');
+        document.getElementById('hospitalDoctors').value = doctorLines;
+        const modal = new bootstrap.Modal(document.getElementById('hospitalModal'));
+        modal.show();
+    }
+
+    function submitHospital() {
+        const payload = {
+            name: document.getElementById('hospitalName').value,
+            contact_phone: document.getElementById('hospitalPhone').value,
+            address: document.getElementById('hospitalAddress').value,
+            capacity_total: parseInt(document.getElementById('hospitalCapacityTotal').value || '0'),
+            capacity_available: parseInt(document.getElementById('hospitalCapacityAvailable').value || '0'),
+            services: document.getElementById('hospitalServices').value,
+            doctors: serializeDoctors(document.getElementById('hospitalDoctors').value)
+        };
+
+        const method = editingId ? 'PUT' : 'POST';
+        const url = editingId ? `/api/hospitals/${editingId}` : '/api/hospitals';
+        fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(res => res.json()).then(data => {
+            if (data.status === 'success') {
+                location.reload();
+            } else {
+                alert('Unable to save hospital');
+            }
+        });
+    }
+
+    function deleteHospital(id) {
+        if (!confirm('Delete this hospital?')) return;
+        fetch(`/api/hospitals/${id}`, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    location.reload();
+                } else {
+                    alert('Delete failed');
+                }
+            });
+    }
+</script>
+{% endblock %}
+
