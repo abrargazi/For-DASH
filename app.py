@@ -635,7 +635,10 @@ def create_hospital():
             return jsonify({'status': 'error', 'message': 'Address is required'})
     
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 =======
+=======
+>>>>>>> Stashed changes
     hospital = Hospital(
         name=data.get('name'),
         address=address,
