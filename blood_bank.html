@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+
+{% block title %}Blood Bank - DASH{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col-md-8">
+                            <h2 class="mb-2">
+                                <i class="fas fa-tint me-2"></i>Blood Bank
+                            </h2>
+                            <p class="mb-0">Request or donate blood to help save lives</p>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <button class="btn btn-light me-2" onclick="openRequestBloodModal()">
+                                <i class="fas fa-plus me-2"></i>Request Blood
+                            </button>
+                            <button class="btn btn-outline-light" onclick="openDonateBloodModal()">
+                                <i class="fas fa-heart me-2"></i>Donate Blood
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Blood Requests -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-exclamation-circle me-2"></i>Blood Requests
+                        <span class="badge bg-light text-dark ms-2">{{ blood_requests|length }}</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if blood_requests %}
+                        {% for request in blood_requests %}
+                        <div class="card mb-3 border-{% if request.urgency_level == 'critical' %}danger{% elif request.urgency_level == 'high' %}warning{% else %}info{% endif %}">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div>
+                                        <h6 class="mb-1">
+                                            <span class="badge bg-danger me-2">{{ request.blood_type }}</span>
+                                            {{ request.quantity }}
+                                        </h6>
+                                        {% if request.patient_name %}
+                                        <p class="mb-1"><strong>Patient:</strong> {{ request.patient_name }}</p>
+                                        {% endif %}
+                                        {% if request.hospital_name %}
+                                        <p class="mb-1"><strong>Hospital:</strong> {{ request.hospital_name }}</p>
+                                        {% endif %}
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="badge bg-{% if request.urgency_level == 'critical' %}danger{% elif request.urgency_level == 'high' %}warning{% else %}info{% endif %}">
+                                            {{ request.urgency_level.title() }}
+                                        </span>
+                                        <br>
+                                        <span class="badge bg-{% if request.status == 'completed' %}success{% elif request.status == 'accepted' %}warning{% elif request.status == 'in_progress' %}info{% else %}secondary{% endif %} mt-1">
+                                            {{ request.status.replace('_', ' ').title() }}
+                                        </span>
+                                    </div>
+                                </div>
+                                {% if request.description %}
+                                <p class="small mb-2">{{ request.description }}</p>
+                                {% endif %}
+                                {% if request.contact_phone %}
+                                <p class="small mb-2"><i class="fas fa-phone me-1"></i>{{ request.contact_phone }}</p>
+                                {% endif %}
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small class="text-muted">{{ request.created_at.strftime('%m/%d/%Y %H:%M') }}</small>
+                                    {% if request.status == 'accepted' and request.rescuer %}
+                                    <small class="text-success">
+                                        <i class="fas fa-user-check me-1"></i>Accepted by {{ request.rescuer.username }}
+                                    </small>
+                                    {% endif %}
+                                    {% if current_user.user_type == 'rescue_team' and request.status == 'pending' %}
+                                    <button class="btn btn-sm btn-success" onclick="acceptBloodRequest({{ request.id }})">
+                                        <i class="fas fa-check me-1"></i>Accept
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-tint fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No Blood Requests</h5>
+                            <p class="text-muted">No blood requests have been made yet.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Blood Donations -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-heart me-2"></i>Available Donations
+                        <span class="badge bg-light text-dark ms-2">{{ blood_donations|length }}</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if blood_donations %}
+                        {% for donation in blood_donations %}
+                        <div class="card mb-3 border-success">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div>
+                                        <h6 class="mb-1">
+                                            <span class="badge bg-success me-2">{{ donation.blood_type }}</span>
+                                            {{ donation.quantity }}
+                                        </h6>
+                                        <p class="mb-1"><strong>Donor:</strong> {{ donation.user.username }}</p>
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="badge bg-success">Available</span>
+                                    </div>
+                                </div>
+                                {% if donation.availability_date %}
+                                <p class="small mb-2">
+                                    <i class="fas fa-calendar me-1"></i>
+                                    Available: {{ donation.availability_date.strftime('%m/%d/%Y %H:%M') }}
+                                </p>
+                                {% endif %}
+                                {% if donation.description %}
+                                <p class="small mb-2">{{ donation.description }}</p>
+                                {% endif %}
+                                {% if donation.contact_phone %}
+                                <p class="small mb-2"><i class="fas fa-phone me-1"></i>{{ donation.contact_phone }}</p>
+                                {% endif %}
+                                <small class="text-muted">{{ donation.created_at.strftime('%m/%d/%Y %H:%M') }}</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-heart fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No Available Donations</h5>
+                            <p class="text-muted">No blood donations are currently available.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Request Blood Modal -->
+<div class="modal fade" id="requestBloodModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="fas fa-exclamation-circle me-2"></i>Request Blood</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="requestBloodForm">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Blood Type <span class="text-danger">*</span></label>
+                            <select class="form-select" id="requestBloodType" required>
+                                <option value="">Select blood type</option>
+                                <option value="A+">A+</option>
+                                <option value="A-">A-</option>
+                                <option value="B+">B+</option>
+                                <option value="B-">B-</option>
+                                <option value="AB+">AB+</option>
+                                <option value="AB-">AB-</option>
+                                <option value="O+">O+</option>
+                                <option value="O-">O-</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Quantity <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="requestQuantity" placeholder="e.g., 2 units, 500ml" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Urgency Level <span class="text-danger">*</span></label>
+                        <select class="form-select" id="requestUrgency" required>
+                            <option value="">Select urgency</option>
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Patient Name</label>
+                            <input type="text" class="form-control" id="patientName" placeholder="Patient's name">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Hospital Name</label>
+                            <input type="text" class="form-control" id="hospitalName" placeholder="Hospital name">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Contact Phone <span class="text-danger">*</span></label>
+                        <input type="tel" class="form-control" id="requestContactPhone" placeholder="+1234567890" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" id="requestDescription" rows="3" placeholder="Additional details about the blood request..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="submitBloodRequest()">Submit Request</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Donate Blood Modal -->
+<div class="modal fade" id="donateBloodModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-heart me-2"></i>Donate Blood</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="donateBloodForm">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Blood Type <span class="text-danger">*</span></label>
+                            <select class="form-select" id="donateBloodType" required>
+                                <option value="">Select blood type</option>
+                                <option value="A+">A+</option>
+                                <option value="A-">A-</option>
+                                <option value="B+">B+</option>
+                                <option value="B-">B-</option>
+                                <option value="AB+">AB+</option>
+                                <option value="AB-">AB-</option>
+                                <option value="O+">O+</option>
+                                <option value="O-">O-</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Quantity <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="donateQuantity" placeholder="e.g., 1 unit, 500ml" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Availability Date</label>
+                        <input type="datetime-local" class="form-control" id="availabilityDate">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Contact Phone <span class="text-danger">*</span></label>
+                        <input type="tel" class="form-control" id="donateContactPhone" placeholder="+1234567890" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" id="donateDescription" rows="3" placeholder="Any additional information..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" onclick="submitBloodDonation()">Submit Donation</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let userLocation = null;
+
+    // Get user location
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(position) {
+            userLocation = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+            };
+        });
+    }
+
+    function openRequestBloodModal() {
+        new bootstrap.Modal(document.getElementById('requestBloodModal')).show();
+    }
+
+    function openDonateBloodModal() {
+        new bootstrap.Modal(document.getElementById('donateBloodModal')).show();
+    }
+
+    function submitBloodRequest() {
+        if (!userLocation) {
+            alert('Please allow location access to create a blood request.');
+            return;
+        }
+
+        const data = {
+            blood_type: document.getElementById('requestBloodType').value,
+            quantity: document.getElementById('requestQuantity').value,
+            urgency_level: document.getElementById('requestUrgency').value,
+            patient_name: document.getElementById('patientName').value,
+            hospital_name: document.getElementById('hospitalName').value,
+            contact_phone: document.getElementById('requestContactPhone').value,
+            description: document.getElementById('requestDescription').value,
+            lat: userLocation.lat,
+            lng: userLocation.lng
+        };
+
+        if (!data.blood_type || !data.quantity || !data.urgency_level || !data.contact_phone) {
+            alert('Please fill in all required fields.');
+            return;
+        }
+
+        fetch('/api/create_blood_request', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                alert('Blood request submitted successfully!');
+                bootstrap.Modal.getInstance(document.getElementById('requestBloodModal')).hide();
+                location.reload();
+            } else {
+                alert('Failed to submit blood request. Please try again.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error submitting blood request.');
+        });
+    }
+
+    function submitBloodDonation() {
+        if (!userLocation) {
+            alert('Please allow location access to create a blood donation.');
+            return;
+        }
+
+        const availabilityDate = document.getElementById('availabilityDate').value;
+        const data = {
+            blood_type: document.getElementById('donateBloodType').value,
+            quantity: document.getElementById('donateQuantity').value,
+            contact_phone: document.getElementById('donateContactPhone').value,
+            description: document.getElementById('donateDescription').value,
+            availability_date: availabilityDate ? new Date(availabilityDate).toISOString() : null,
+            lat: userLocation.lat,
+            lng: userLocation.lng
+        };
+
+        if (!data.blood_type || !data.quantity || !data.contact_phone) {
+            alert('Please fill in all required fields.');
+            return;
+        }
+
+        fetch('/api/create_blood_donation', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                alert('Blood donation submitted successfully!');
+                bootstrap.Modal.getInstance(document.getElementById('donateBloodModal')).hide();
+                location.reload();
+            } else {
+                alert('Failed to submit blood donation. Please try again.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error submitting blood donation.');
+        });
+    }
+
+    function acceptBloodRequest(requestId) {
+        if (confirm('Accept this blood request?')) {
+            fetch(`/api/accept_blood_request/${requestId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('Blood request accepted successfully!');
+                    location.reload();
+                } else {
+                    alert('Failed to accept blood request.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error accepting blood request.');
+            });
+        }
+    }
+
+    // Listen for real-time blood request updates
+    socket.on('new_blood_request', function(data) {
+        // Show notification for rescue teams
+        {% if current_user.user_type == 'rescue_team' %}
+        const notification = document.createElement('div');
+        notification.className = 'alert alert-danger alert-dismissible fade show position-fixed';
+        notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 350px;';
+        notification.innerHTML = `
+            <strong>🩸 NEW BLOOD REQUEST!</strong><br>
+            Blood Type: ${data.blood_type}<br>
+            Urgency: ${data.urgency}<br>
+            <button type="button" class="btn btn-sm btn-danger mt-2" onclick="location.reload()">
+                <i class="fas fa-eye me-1"></i>View Request
+            </button>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 10000);
+        {% endif %}
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Disaster Risk Assessment - DASH{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <h2 class="mb-2">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Disaster Risk Assessment & Early Warning
+                    </h2>
+                    <p class="mb-0">Real-time disaster risk predictions and early warning alerts</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if current_user.user_type in ['admin', 'rescue_team'] %}
+    <div class="row mb-4">
+        <div class="col-12 text-end">
+            <button class="btn btn-primary" onclick="assessRisk()">
+                <i class="fas fa-search me-2"></i>Assess Risk at Current Location
+            </button>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-list me-2"></i>Active Risk Alerts</h5>
+                </div>
+                <div class="card-body">
+                    {% if risks %}
+                        {% for risk in risks %}
+                        <div class="card mb-3 border-{% if risk.severity_level == 'critical' %}danger{% elif risk.severity_level == 'high' %}warning{% elif risk.severity_level == 'moderate' %}info{% else %}secondary{% endif %}">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h5>
+                                            <span class="badge bg-{% if risk.severity_level == 'critical' %}danger{% elif risk.severity_level == 'high' %}warning{% elif risk.severity_level == 'moderate' %}info{% else %}secondary{% endif %} me-2">
+                                                {{ risk.severity_level.upper() }}
+                                            </span>
+                                            {{ risk.disaster_type.title() }}
+                                        </h5>
+                                        <p class="mb-2">{{ risk.description }}</p>
+                                        {% if risk.action_recommendations %}
+                                        <div class="alert alert-info mb-2">
+                                            <strong>Recommendations:</strong><br>
+                                            {{ risk.action_recommendations|replace('\n', '<br>')|safe }}
+                                        </div>
+                                        {% endif %}
+                                        <small class="text-muted">
+                                            <i class="fas fa-clock me-1"></i>{{ risk.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-shield-alt fa-3x text-success mb-3"></i>
+                            <h5 class="text-success">No Active Risk Alerts</h5>
+                            <p class="text-muted">All clear! No disaster risks detected at this time.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function assessRisk() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(function(position) {
+                fetch('/api/disaster_risk/assess', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        alert(`Risk Assessment Complete!\nSeverity: ${data.risk.severity}\nType: ${data.risk.disaster_type}`);
+                        location.reload();
+                    }
+                });
+            });
+        }
+    }
+</script>
+{% endblock %}
+
