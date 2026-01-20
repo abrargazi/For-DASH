@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Hospitals - DASH{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-hospital me-2"></i>Nearby Hospitals</h5>
+                    <div>
+                        {% if user_lat and user_lng %}
+                            <span class="badge bg-success">Using your location</span>
+                        {% else %}
+                            <span class="badge bg-warning text-dark">Set your location for distance</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if hospitals %}
+                        <div class="row">
+                            {% for hospital in hospitals %}
+                            <div class="col-md-6 col-lg-4 mb-3">
+                                <div class="card h-100 shadow-sm">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-start mb-2">
+                                            <h5 class="card-title mb-0">{{ hospital.name }}</h5>
+                                            {% if hospital.distance_km is defined and hospital.distance_km %}
+                                                <span class="badge bg-primary">{{ hospital.distance_km }} km</span>
+                                            {% endif %}
+                                        </div>
+                                        <p class="text-muted small mb-2">
+                                            <i class="fas fa-location-dot me-1"></i>{{ hospital.address or 'Address not provided' }}
+                                        </p>
+                                        <p class="mb-2">
+                                            <span class="badge bg-success">{{ hospital.capacity_available }} free</span>
+                                            <span class="badge bg-light text-dark">{{ hospital.capacity_total }} total</span>
+                                            <span class="badge bg-secondary">{{ hospital.patients_admitted }} admitted</span>
+                                        </p>
+                                        <p class="small mb-2">
+                                            <i class="fas fa-user-md me-1"></i>
+                                            Available Doctors:
+                                            {% if hospital.doctors %}
+                                                {{ hospital.doctors|length }}
+                                            {% else %}
+                                                0
+                                            {% endif %}
+                                        </p>
+                                        {% if hospital.doctors %}
+                                            <ul class="small">
+                                                {% for doc in hospital.doctors[:3] %}
+                                                    <li>{{ doc.name }} - {{ doc.specialty }}</li>
+                                                {% endfor %}
+                                                {% if hospital.doctors|length > 3 %}
+                                                    <li class="text-muted">+{{ hospital.doctors|length - 3 }} more</li>
+                                                {% endif %}
+                                            </ul>
+                                        {% endif %}
+                                        {% if hospital.contact_phone %}
+                                            <a class="btn btn-sm btn-outline-primary" href="tel:{{ hospital.contact_phone }}">
+                                                <i class="fas fa-phone me-1"></i>Call
+                                            </a>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-hospital fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">No hospitals have been added yet.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
