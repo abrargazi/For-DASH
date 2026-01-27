@@ -1,13 +1,16 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session, send_from_directory
+from sqlalchemy import text
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
 import json
 import requests
+from uuid import uuid4
 from geopy.distance import geodesic
 import folium
 from folium import plugins
@@ -19,6 +22,11 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'dash-secret-key-2024'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dash.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['UPLOAD_FOLDER'] = os.path.join(os.getcwd(), 'instance', 'uploads')
+app.config['ALLOWED_IMAGE_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif'}
+
+# ensure upload dir exists
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
@@ -37,6 +45,11 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(120), nullable=False)
     user_type = db.Column(db.String(20), nullable=False)  # 'user', 'admin', 'rescue_team'
     phone = db.Column(db.String(20))
+    profile_photo = db.Column(db.String(300))
+    # Stored as JSON list: [{id, number, label}, ...]
+    emergency_contact = db.Column(db.Text)
+    # Family members stored as JSON list: [{id, username, email}, ...]
+    family_members = db.Column(db.Text)
     location_lat = db.Column(db.Float)
     location_lng = db.Column(db.Float)
     is_online = db.Column(db.Boolean, default=False)
@@ -60,9 +73,11 @@ class HelpRequest(db.Model):
     status = db.Column(db.String(20), default='pending')  # pending, in_progress, completed, cancelled
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    accepted_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # Rescue team member who accepted
     
     # Relationship
-    user = db.relationship('User', backref=db.backref('help_requests', lazy=True))
+    user = db.relationship('User', foreign_keys=[user_id], backref=db.backref('help_requests', lazy=True))
+    rescuer = db.relationship('User', foreign_keys=[accepted_by], backref=db.backref('accepted_help_requests', lazy=True))
 
 # Resource Offer Model
 class ResourceOffer(db.Model):
@@ -334,6 +349,33 @@ class RewardTransaction(db.Model):
     
     user = db.relationship('User', foreign_keys=[user_id], backref=db.backref('reward_transactions', lazy=True))
     giver = db.relationship('User', foreign_keys=[given_by], backref=db.backref('rewards_given', lazy=True))
+
+
+# Call Log Model
+class CallLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    called_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    called_number = db.Column(db.String(50), nullable=False)
+    call_type = db.Column(db.String(50), nullable=False)  # national, nearest_rescue, contact
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', foreign_keys=[user_id], backref=db.backref('call_logs', lazy=True))
+    called_user = db.relationship('User', foreign_keys=[called_user_id])
+
+
+# Rescue Rating Model
+class RescueRating(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    rater_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # User who gave the rating
+    rescue_team_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # Rescue team user id
+    score = db.Column(db.Integer, nullable=False)  # 1-5
+    comment = db.Column(db.Text)
+    related_id = db.Column(db.Integer)  # optional related record id (help request, blood request, mission, sos)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    rater = db.relationship('User', foreign_keys=[rater_id], backref=db.backref('ratings_given', lazy=True))
+    rescue_team = db.relationship('User', foreign_keys=[rescue_team_id], backref=db.backref('ratings_received', lazy=True))
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -655,6 +697,291 @@ def get_map_data():
         } for res in resources]
     })
 
+
+# Log a call made from the app (for auditing/tracking)
+@app.route('/api/log_call', methods=['POST'])
+@login_required
+def log_call():
+    data = request.get_json()
+    called_number = data.get('number')
+    called_user_id = data.get('called_user_id')
+    call_type = data.get('call_type', 'contact')
+
+    if not called_number:
+        return jsonify({'status': 'error', 'message': 'Called number is required'})
+
+    call = CallLog(
+        user_id=current_user.id,
+        called_user_id=called_user_id,
+        called_number=called_number,
+        call_type=call_type
+    )
+    db.session.add(call)
+    db.session.commit()
+
+    return jsonify({'status': 'success', 'call_id': call.id})
+
+
+@app.route('/api/emergency_contact', methods=['POST'])
+@login_required
+def save_emergency_contact():
+    data = request.get_json()
+    number = data.get('number')
+    label = data.get('label', '')
+    if not number:
+        return jsonify({'status': 'error', 'message': 'Number is required'}), 400
+
+    # Load existing contacts (stored as JSON list) or create new
+    try:
+        existing = json.loads(current_user.emergency_contact or '[]')
+    except Exception:
+        existing = []
+
+    # create contact object
+    contact = {'id': uuid4().hex, 'number': number, 'label': label}
+    existing.append(contact)
+    current_user.emergency_contact = json.dumps(existing)
+    db.session.commit()
+    return jsonify({'status': 'success', 'contacts': existing})
+
+
+@app.route('/api/emergency_contact', methods=['GET'])
+@login_required
+def get_emergency_contact():
+    try:
+        contacts = json.loads(current_user.emergency_contact or '[]')
+    except Exception:
+        contacts = []
+    return jsonify({'status': 'success', 'contacts': contacts})
+
+
+@app.route('/api/emergency_contact/<contact_id>', methods=['DELETE'])
+@login_required
+def delete_emergency_contact(contact_id):
+    try:
+        contacts = json.loads(current_user.emergency_contact or '[]')
+    except Exception:
+        contacts = []
+    new_contacts = [c for c in contacts if c.get('id') != contact_id]
+    current_user.emergency_contact = json.dumps(new_contacts)
+    db.session.commit()
+    return jsonify({'status': 'success', 'contacts': new_contacts})
+
+
+@app.route('/api/family_members', methods=['POST'])
+@login_required
+def add_family_member():
+    """Add a family member by username or email to the current user's saved family list."""
+    data = request.get_json()
+    username = data.get('username')
+    email = data.get('email')
+    if not username and not email:
+        return jsonify({'status': 'error', 'message': 'username or email required'}), 400
+
+    print(f"[DEBUG] add_family_member called with username={username} email={email}")
+    # Find the user to add
+    member = None
+    if username:
+        member = User.query.filter_by(username=username).first()
+    if not member and email:
+        member = User.query.filter_by(email=email).first()
+
+    if not member:
+        print(f"[DEBUG] member not found for username={username} email={email}")
+        return jsonify({'status': 'error', 'message': 'User not found'}), 404
+
+    # Prevent adding self
+    if member.id == current_user.id:
+        return jsonify({'status': 'error', 'message': 'Cannot add yourself'}), 400
+
+    # Load existing family list
+    try:
+        fam = json.loads(current_user.family_members or '[]')
+    except Exception:
+        fam = []
+
+    # Avoid duplicates
+    for f in fam:
+        if f.get('id') == member.id or f.get('username') == member.username or (member.email and f.get('email') == member.email):
+            return jsonify({'status': 'error', 'message': 'Member already added'}), 400
+
+    entry = {'id': member.id, 'username': member.username, 'email': member.email}
+    fam.append(entry)
+    current_user.family_members = json.dumps(fam)
+    db.session.commit()
+    print(f"[DEBUG] family member added: {entry} for user {current_user.username}")
+    return jsonify({'status': 'success', 'family': fam})
+
+
+@app.route('/api/family_members', methods=['GET'])
+@login_required
+def list_family_members():
+    print(f"[DEBUG] list_family_members called for {current_user.username}")
+    try:
+        fam = json.loads(current_user.family_members or '[]')
+    except Exception:
+        fam = []
+    return jsonify({'status': 'success', 'family': fam})
+
+
+@app.route('/api/users/search')
+@login_required
+def search_users():
+    """Search existing users by partial username or email. Returns id, username, email."""
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify({'status': 'success', 'users': []})
+    q_like = f"%{q}%"
+    try:
+        users = User.query.filter((User.username.ilike(q_like)) | (User.email.ilike(q_like))).limit(15).all()
+    except Exception:
+        users = []
+    result = []
+    for u in users:
+        result.append({'id': u.id, 'username': u.username, 'email': u.email})
+    return jsonify({'status': 'success', 'users': result})
+
+
+@app.route('/api/family_members/<member_id>', methods=['DELETE'])
+@login_required
+def delete_family_member(member_id):
+    print(f"[DEBUG] delete_family_member called id={member_id} user={current_user.username}")
+    try:
+        fam = json.loads(current_user.family_members or '[]')
+    except Exception:
+        fam = []
+    new_fam = [f for f in fam if str(f.get('id')) != str(member_id)]
+    current_user.family_members = json.dumps(new_fam)
+    db.session.commit()
+    return jsonify({'status': 'success', 'family': new_fam})
+
+
+# Mark the current user as safe: stop SOS, cancel help requests, stop live location sharing, notify stakeholders
+@app.route('/api/i_am_safe', methods=['POST'])
+@login_required
+def i_am_safe():
+    # Stop all active SOS alerts for this user
+    active_sos = SOSAlert.query.filter_by(user_id=current_user.id).filter(SOSAlert.status=='active').all()
+    for s in active_sos:
+        s.status = 'resolved'
+
+    # Cancel or close active help requests by this user
+    active_requests = HelpRequest.query.filter_by(user_id=current_user.id).filter(HelpRequest.status.in_(['pending','in_progress'])).all()
+    for r in active_requests:
+        r.status = 'cancelled'
+
+    # Optionally, mark user location sharing off
+    current_user.is_online = False
+
+    db.session.commit()
+
+    # Notify rescue teams and admins
+    socketio.emit('user_safe', {
+        'user_id': current_user.id,
+        'username': current_user.username,
+        'timestamp': datetime.utcnow().isoformat()
+    }, room='rescue_teams')
+
+    socketio.emit('user_safe', {
+        'user_id': current_user.id,
+        'username': current_user.username,
+        'timestamp': datetime.utcnow().isoformat()
+    }, room='admins')
+
+    # Notify emergency contacts — if you store contacts, iterate and create notifications
+    # For now, create a notification for the user as confirmation
+    notification = Notification(
+        user_id=current_user.id,
+        title='You marked yourself as SAFE',
+        message='You have been marked safe. Active SOS alerts and help requests have been closed.',
+        notification_type='safety'
+    )
+    db.session.add(notification)
+    db.session.commit()
+
+    # Attempt to send SMS to emergency contact if available and Twilio configured
+    tw_sid = os.getenv('TWILIO_ACCOUNT_SID')
+    tw_token = os.getenv('TWILIO_AUTH_TOKEN')
+    tw_from = os.getenv('TWILIO_FROM_NUMBER')
+    sms_results = []
+
+    # Collect phone numbers from emergency_contact JSON list (if used)
+    try:
+        em_contacts = json.loads(current_user.emergency_contact or '[]')
+    except Exception:
+        em_contacts = []
+
+    for c in em_contacts:
+        number = c.get('number')
+        if not number:
+            continue
+        sms_results.append({'to': number, 'sent': False, 'error': None})
+
+    # Collect phone numbers from added family members (if they are existing users)
+    try:
+        fam = json.loads(current_user.family_members or '[]')
+    except Exception:
+        fam = []
+
+    for f in fam:
+        try:
+            member_user = User.query.get(int(f.get('id')))
+            if member_user and member_user.phone:
+                sms_results.append({'to': member_user.phone, 'sent': False, 'error': None})
+        except Exception:
+            continue
+
+    # Attempt to send SMS to each collected number if Twilio configured
+    if sms_results and tw_sid and tw_token and tw_from:
+        url = f'https://api.twilio.com/2010-04-01/Accounts/{tw_sid}/Messages.json'
+        for entry in sms_results:
+            to_num = entry['to']
+            try:
+                body = f"Hi, {current_user.username} marked themselves SAFE on DASH. They are no longer in need of urgent help."
+                payload = {'From': tw_from, 'To': to_num, 'Body': body}
+                resp = requests.post(url, data=payload, auth=(tw_sid, tw_token), timeout=10)
+                if resp.status_code in (200, 201):
+                    entry['sent'] = True
+                else:
+                    entry['error'] = f'Twilio error: {resp.status_code} {resp.text}'
+            except Exception as e:
+                entry['error'] = str(e)
+
+    # Build a friendly message
+    sent_count = sum(1 for e in sms_results if e.get('sent'))
+    fail_count = sum(1 for e in sms_results if not e.get('sent'))
+    result_msg = 'You are marked safe.'
+    if sms_results:
+        result_msg += f' SMS attempted to {len(sms_results)} contacts: {sent_count} sent, {fail_count} failed.'
+
+    return jsonify({'status': 'success', 'message': result_msg, 'sms_results': sms_results})
+
+
+# Find nearest rescue teams for a given lat/lng
+@app.route('/api/nearest_rescue')
+@login_required
+def nearest_rescue():
+    lat = request.args.get('lat', type=float)
+    lng = request.args.get('lng', type=float)
+    max_km = request.args.get('max_km', type=float, default=50)
+
+    if lat is None or lng is None:
+        return jsonify({'status': 'error', 'message': 'lat and lng required'}), 400
+
+    # Find rescue_team users with location set
+    candidates = User.query.filter_by(user_type='rescue_team').filter(User.location_lat.isnot(None), User.location_lng.isnot(None)).all()
+    result = []
+    for c in candidates:
+        try:
+            dist = geodesic((lat, lng), (c.location_lat, c.location_lng)).km
+            if dist <= max_km:
+                result.append({'id': c.id, 'username': c.username, 'phone': c.phone, 'distance_km': round(dist,2)})
+        except Exception:
+            continue
+
+    result = sorted(result, key=lambda x: x['distance_km'])
+    return jsonify({'status': 'success', 'rescues': result[:10]})
+
 def serialize_hospital(hospital, user_lat=None, user_lng=None):
     """Return a serializable hospital dict with optional distance."""
     base = {
@@ -692,6 +1019,38 @@ def nearest_hospitals_for_user(user, limit=5, max_distance_km=None):
     if user_lat is not None and user_lng is not None:
         hospital_list = sorted(hospital_list, key=lambda h: h.get('distance_km') if h.get('distance_km') is not None else 1e9)
     return hospital_list[:limit]
+
+
+def allowed_image(filename):
+    if not filename or '.' not in filename:
+        return False
+    ext = filename.rsplit('.', 1)[1].lower()
+    return ext in app.config.get('ALLOWED_IMAGE_EXTENSIONS', set())
+
+
+@app.route('/uploads/<path:filename>')
+def uploaded_file(filename):
+    # Serve uploaded profile photos (stored in instance/uploads)
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+
+@app.route('/api/upload_profile_photo', methods=['POST'])
+@login_required
+def upload_profile_photo():
+    if 'photo' not in request.files:
+        return jsonify({'status': 'error', 'message': 'No file part'}), 400
+    file = request.files['photo']
+    if file.filename == '':
+        return jsonify({'status': 'error', 'message': 'No selected file'}), 400
+    if file and allowed_image(file.filename):
+        filename = secure_filename(f"{current_user.id}_profile_{uuid4().hex}_{file.filename}")
+        save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(save_path)
+        # store relative path in DB
+        current_user.profile_photo = filename
+        db.session.commit()
+        return jsonify({'status': 'success', 'photo_url': url_for('uploaded_file', filename=filename)})
+    return jsonify({'status': 'error', 'message': 'Invalid file type'}), 400
 
 def hospitals_near_location(lat, lng, max_distance_km=10):
     """Return hospitals within max_distance_km of given location."""
@@ -970,10 +1329,22 @@ def profile():
         missions = RescueMission.query.filter_by(rescue_team_id=current_user.id).order_by(RescueMission.started_at.desc()).all()
         total_people_helped = sum(m.people_helped for m in missions)
     user_help_requests = HelpRequest.query.filter_by(user_id=current_user.id).order_by(HelpRequest.created_at.desc()).limit(10).all()
+
+    # Rating summary (for rescue teams and users viewing their own profile)
+    avg_rating = None
+    rating_count = 0
+    if current_user.user_type == 'rescue_team':
+        ratings = RescueRating.query.filter_by(rescue_team_id=current_user.id).all()
+        rating_count = len(ratings)
+        if rating_count:
+            avg_rating = round(sum(r.score for r in ratings) / rating_count, 2)
+
     return render_template('profile.html',
                            missions=missions,
                            total_people_helped=total_people_helped,
-                           help_requests=user_help_requests)
+                           help_requests=user_help_requests,
+                           avg_rating=avg_rating,
+                           rating_count=rating_count)
 
 # Bulletin Board Route
 @app.route('/bulletin')
@@ -1199,6 +1570,7 @@ def assign_request(request_id):
     
     help_request = HelpRequest.query.get_or_404(request_id)
     help_request.status = 'in_progress'
+    help_request.accepted_by = current_user.id
     db.session.commit()
     
     return jsonify({'status': 'success'})
@@ -1260,6 +1632,78 @@ def get_user_details(user_id):
             'is_available': offer.is_available,
             'created_at': offer.created_at.isoformat()
         } for offer in resource_offers]
+    })
+
+
+@app.route('/api/rate_rescue', methods=['POST'])
+@login_required
+def rate_rescue():
+    """Allow a regular user to rate a rescue team after being helped."""
+    if current_user.user_type != 'user':
+        return jsonify({'status': 'error', 'message': 'Only regular users can rate rescue teams'})
+
+    data = request.get_json()
+    rescue_team_id = data.get('rescue_team_id')
+    score = int(data.get('score', 0))
+    comment = data.get('comment', '')
+    related_id = data.get('related_id')
+
+    if not rescue_team_id or score < 1 or score > 5:
+        return jsonify({'status': 'error', 'message': 'Invalid rating data'})
+
+    rescue_team = User.query.filter_by(id=rescue_team_id, user_type='rescue_team').first()
+    if not rescue_team:
+        return jsonify({'status': 'error', 'message': 'Rescue team not found'})
+
+    rating = RescueRating(
+        rater_id=current_user.id,
+        rescue_team_id=rescue_team_id,
+        score=score,
+        comment=comment,
+        related_id=related_id
+    )
+    db.session.add(rating)
+    db.session.commit()
+
+    # Optionally update rescue team's reputation score via points
+    award_points(rescue_team_id, points=score, transaction_type='rating_received', description=f'Rating from {current_user.username}: {comment}', related_id=rating.id)
+
+    # Notify rescue team and admins
+    notification = Notification(
+        user_id=rescue_team_id,
+        title='New Rating Received',
+        message=f'You received a {score}-star rating from {current_user.username}',
+        notification_type='rating'
+    )
+    db.session.add(notification)
+    db.session.commit()
+
+    return jsonify({'status': 'success', 'message': 'Rating submitted successfully'})
+
+
+@app.route('/api/rescue_ratings/<int:rescue_team_id>')
+@login_required
+def rescue_ratings(rescue_team_id):
+    # Public endpoint to get ratings summary for a rescue team
+    rescue_team = User.query.filter_by(id=rescue_team_id, user_type='rescue_team').first()
+    if not rescue_team:
+        return jsonify({'status': 'error', 'message': 'Rescue team not found'})
+
+    ratings = RescueRating.query.filter_by(rescue_team_id=rescue_team_id).order_by(RescueRating.created_at.desc()).limit(50).all()
+    count = len(ratings)
+    avg = round(sum(r.score for r in ratings) / count, 2) if count else None
+
+    return jsonify({
+        'status': 'success',
+        'rescue_team': rescue_team.username,
+        'average': avg,
+        'count': count,
+        'ratings': [{
+            'rater': r.rater.username,
+            'score': r.score,
+            'comment': r.comment,
+            'created_at': r.created_at.isoformat()
+        } for r in ratings]
     })
 
 # Blood Bank Routes
@@ -1439,6 +1883,57 @@ def blood_bank_stats():
         'total_donations': total_donations,
         'available_donations': available_donations,
         'blood_type_stats': blood_type_stats
+    })
+
+@app.route('/api/nearest_blood_banks')
+@login_required
+def nearest_blood_banks():
+    """Return available blood donations near a location along with nearby hospitals for routing."""
+    try:
+        lat = float(request.args.get('lat')) if request.args.get('lat') else None
+        lng = float(request.args.get('lng')) if request.args.get('lng') else None
+    except ValueError:
+        lat = None
+        lng = None
+
+    # Fallback to user's stored location
+    if lat is None or lng is None:
+        if current_user.location_lat and current_user.location_lng:
+            lat = current_user.location_lat
+            lng = current_user.location_lng
+        else:
+            return jsonify({'status': 'error', 'message': 'Location required'}), 400
+
+    max_km = float(request.args.get('max_km', 50))
+
+    donations = BloodDonation.query.filter_by(is_available=True).all()
+    donation_results = []
+    for d in donations:
+        if d.location_lat is None or d.location_lng is None:
+            continue
+        distance = geodesic((lat, lng), (d.location_lat, d.location_lng)).km
+        if distance <= max_km:
+            donation_results.append({
+                'id': d.id,
+                'blood_type': d.blood_type,
+                'quantity': d.quantity,
+                'contact_phone': d.contact_phone,
+                'availability_date': d.availability_date.isoformat() if d.availability_date else None,
+                'description': d.description,
+                'donor': d.user.username if d.user else 'Unknown',
+                'distance_km': round(distance, 2),
+                'location': {'lat': d.location_lat, 'lng': d.location_lng}
+            })
+
+    donation_results = sorted(donation_results, key=lambda x: x['distance_km'])
+
+    nearby_hospitals = hospitals_near_location(lat, lng, max_distance_km=max_km)
+
+    return jsonify({
+        'status': 'success',
+        'origin': {'lat': lat, 'lng': lng},
+        'donations': donation_results,
+        'hospitals': nearby_hospitals
     })
 
 # ========== MISSING & FOUND PEOPLE ROUTES ==========
@@ -1994,8 +2489,20 @@ def rewards_page():
     rescue_teams = []
     if current_user.user_type == 'user':
         rescue_teams = User.query.filter_by(user_type='rescue_team').all()
+
+    # Get recent accepted help items where current user was helped (to attach as related_id)
+    accepted_items = []
+    if current_user.user_type == 'user':
+        # Help requests accepted by rescue teams for this user
+        accepted_help = HelpRequest.query.filter_by(user_id=current_user.id).filter(HelpRequest.accepted_by.isnot(None)).order_by(HelpRequest.updated_at.desc()).limit(10).all()
+        # Blood requests accepted by rescue teams
+        accepted_blood = BloodRequest.query.filter_by(user_id=current_user.id).filter(BloodRequest.accepted_by.isnot(None)).order_by(BloodRequest.updated_at.desc()).limit(10).all()
+        accepted_items = {
+            'help_requests': accepted_help,
+            'blood_requests': accepted_blood
+        }
     
-    return render_template('rewards.html', reward=reward, transactions=transactions, rescue_teams=rescue_teams)
+    return render_template('rewards.html', reward=reward, transactions=transactions, rescue_teams=rescue_teams, accepted_items=accepted_items)
 
 def award_points(user_id, points, transaction_type, description, related_id=None, badge=None):
     """Award points to a user."""
@@ -2042,6 +2549,7 @@ def give_reward():
     rescue_team_id = data.get('rescue_team_id')
     points = data.get('points', 10)  # Default 10 points
     message = data.get('message', 'Thank you for your help!')
+    related_id = data.get('related_id')
     
     if not rescue_team_id:
         return jsonify({'status': 'error', 'message': 'Rescue team ID is required'})
@@ -2050,6 +2558,20 @@ def give_reward():
     if not rescue_team:
         return jsonify({'status': 'error', 'message': 'Rescue team not found'})
     
+    # Validate related_id if provided: ensure current_user was helped by this rescue team
+    if related_id:
+        valid_related = False
+        # Check HelpRequest
+        hr = HelpRequest.query.filter_by(id=related_id, user_id=current_user.id).first()
+        if hr and hr.accepted_by == rescue_team_id:
+            valid_related = True
+        # Check BloodRequest
+        br = BloodRequest.query.filter_by(id=related_id, user_id=current_user.id).first()
+        if br and br.accepted_by == rescue_team_id:
+            valid_related = True
+        if not valid_related:
+            return jsonify({'status': 'error', 'message': 'Related item not found or not accepted by this rescue team'})
+
     # Check if user has enough points (optional - can be removed if users can give unlimited rewards)
     user_reward = UserReward.query.filter_by(user_id=current_user.id).first()
     if not user_reward:
@@ -2177,28 +2699,86 @@ def from_json_filter(value):
 
 if __name__ == '__main__':
     with app.app_context():
+        # Ensure DB schema has new columns when upgrading existing sqlite DBs
+        try:
+            # Check help_request table for 'accepted_by' column and add if missing
+            res = db.session.execute(text("PRAGMA table_info('help_request')")).fetchall()
+            cols = [r[1] for r in res]
+            if 'accepted_by' not in cols:
+                print("Adding missing column 'accepted_by' to help_request table")
+                db.session.execute(text('ALTER TABLE help_request ADD COLUMN accepted_by INTEGER'))
+                db.session.commit()
+            # Check reward_transaction table for 'given_by' column and add if missing
+            res2 = db.session.execute(text("PRAGMA table_info('reward_transaction')")).fetchall()
+            cols2 = [r[1] for r in res2]
+            if 'given_by' not in cols2:
+                print("Adding missing column 'given_by' to reward_transaction table")
+                db.session.execute(text('ALTER TABLE reward_transaction ADD COLUMN given_by INTEGER'))
+                db.session.commit()
+            # Check user table for 'emergency_contact' column and add if missing
+            try:
+                res3 = db.session.execute(text("PRAGMA table_info('user')")).fetchall()
+                cols3 = [r[1] for r in res3]
+                if 'emergency_contact' not in cols3:
+                    print("Adding missing column 'emergency_contact' to user table")
+                    db.session.execute(text("ALTER TABLE 'user' ADD COLUMN emergency_contact TEXT"))
+                    db.session.commit()
+                # Add family_members column if missing
+                if 'family_members' not in cols3:
+                    print("Adding missing column 'family_members' to user table")
+                    db.session.execute(text("ALTER TABLE 'user' ADD COLUMN family_members TEXT"))
+                    db.session.commit()
+                # Add profile_photo column if missing
+                if 'profile_photo' not in cols3:
+                    print("Adding missing column 'profile_photo' to user table")
+                    db.session.execute(text("ALTER TABLE 'user' ADD COLUMN profile_photo TEXT"))
+                    db.session.commit()
+            except Exception as e:
+                print('User table schema check error (ignored):', e)
+        except Exception as e:
+            # If PRAGMA fails (table might not exist yet), ignore and proceed to create_all
+            print('Schema check error (ignored):', e)
+
+        try:
+            # Check reward_transaction table for 'given_by' column and add if missing
+            res2 = db.session.execute(text("PRAGMA table_info('reward_transaction')")).fetchall()
+            cols2 = [r[1] for r in res2]
+            if 'given_by' not in cols2:
+                print("Adding missing column 'given_by' to reward_transaction table")
+                db.session.execute(text('ALTER TABLE reward_transaction ADD COLUMN given_by INTEGER'))
+                db.session.commit()
+        except Exception as e:
+            print('Schema check error (ignored):', e)
+
         db.create_all()
-        
-        # Create demo accounts if they don't exist
-        if not User.query.filter_by(username='admin').first():
-            admin = User(username='admin', email='admin@dash.com', user_type='admin')
-            admin.set_password('admin123')
-            db.session.add(admin)
-        
-        if not User.query.filter_by(username='user1').first():
-            user1 = User(username='user1', email='user1@dash.com', user_type='user', phone='+1234567890')
-            user1.set_password('user123')
-            db.session.add(user1)
-        
-        if not User.query.filter_by(username='rescue1').first():
-            rescue1 = User(username='rescue1', email='rescue1@dash.com', user_type='rescue_team', phone='+1234567891')
-            rescue1.set_password('rescue123')
-            db.session.add(rescue1)
-        
-        db.session.commit()
-        print("Demo accounts created:")
-        print("Admin: username=admin, password=admin123")
-        print("User: username=user1, password=user123")
-        print("Rescue Team: username=rescue1, password=rescue123")
+
+        # Create demo accounts if they don't exist using raw SQL (avoids ORM selecting missing columns)
+        def ensure_user(username, email, plain_pw, utype, phone=None):
+            try:
+                row = db.session.execute(text("SELECT id FROM user WHERE username = :u LIMIT 1"), {'u': username}).fetchone()
+            except Exception:
+                row = None
+            if row:
+                return
+            pw = generate_password_hash(plain_pw)
+            params = {'username': username, 'email': email, 'pw': pw, 'utype': utype, 'created': datetime.utcnow()}
+            if phone:
+                try:
+                    db.session.execute(text("INSERT INTO user (username, email, password_hash, user_type, phone, created_at) VALUES (:username, :email, :pw, :utype, :phone, :created)"), {**params, 'phone': phone})
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+            else:
+                try:
+                    db.session.execute(text("INSERT INTO user (username, email, password_hash, user_type, created_at) VALUES (:username, :email, :pw, :utype, :created)"), params)
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+
+        ensure_user('admin', 'admin@dash.com', 'admin123', 'admin')
+        ensure_user('user1', 'user1@dash.com', 'user123', 'user', phone='+1234567890')
+        ensure_user('rescue1', 'rescue1@dash.com', 'rescue123', 'rescue_team', phone='+1234567891')
+
+        print("Demo accounts checked/created (if missing): admin/user1/rescue1")
     
     socketio.run(app, debug=True, host='localhost', port=5001)

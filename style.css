@@ -1,0 +1,453 @@
+/* DASH - Disaster Assistance & Support Hub
+   Subtle visual refresh: improved typography, spacing, and color harmony
+   Preserves existing layout and class names so templates stay compatible
+*/
+
+:root {
+    --primary: #4f46e5; /* indigo */
+    --primary-600: #4338ca;
+    --accent: #06b6d4; /* teal */
+    --muted: #6b7280; /* gray-500 */
+    --bg: #f7fbff;
+    --card-bg: #ffffff;
+    --surface: #f1f5f9;
+    --border: #e6edf7;
+    --text: #0f172a;
+    --subtext: #475569;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --glass: rgba(255,255,255,0.6);
+    /* Back-compat names used elsewhere in templates */
+    --white: #ffffff;
+    --text-dark: var(--text);
+    --primary-red: var(--primary);
+    --danger-red: var(--danger);
+    --light-red: rgba(239,68,68,0.08);
+    --border-color: var(--border);
+    --success-green: var(--success);
+    --warning-orange: var(--warning);
+    --info-blue: #3b82f6;
+}
+
+* { box-sizing: border-box; }
+
+html,body { height: 100%; }
+
+body {
+    font-family: Inter, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Layout helpers */
+.container-fluid { padding-left: 1rem; padding-right: 1rem; }
+
+/* NAVBAR */
+.navbar {
+    background: linear-gradient(90deg, rgba(79,70,229,0.95), rgba(6,182,212,0.9));
+    padding: 0.6rem 1rem;
+    box-shadow: 0 6px 18px rgba(15,23,42,0.06);
+}
+
+.navbar-brand { color: #fff !important; font-weight: 700; font-size: 1.25rem; }
+.navbar .nav-link { color: rgba(255,255,255,0.92) !important; margin: 0 0.5rem; }
+.navbar .nav-link:hover { color: #fff !important; opacity: 0.95; }
+.profile-link { font-weight: 600; padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,0.06); }
+
+/* Cards */
+.card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; transition: transform 0.18s ease, box-shadow 0.18s ease; }
+.card:hover { transform: translateY(-6px); box-shadow: 0 16px 40px rgba(15,23,42,0.06); }
+.card-header { background: linear-gradient(90deg, rgba(79,70,229,0.9), rgba(6,182,212,0.85)); color: #fff; border-radius: 10px 10px 0 0; font-weight: 700; }
+
+/* Buttons */
+.btn-primary { background: linear-gradient(90deg,var(--primary),var(--primary-600)); border: none; color: #fff; padding: 0.45rem 0.9rem; border-radius: 8px; box-shadow: 0 8px 24px rgba(67,56,202,0.12); }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(67,56,202,0.14); }
+.btn-outline-primary { color: var(--primary); border-color: var(--primary); }
+.btn-outline-primary:hover { background: rgba(79,70,229,0.06); }
+.btn-success { background: linear-gradient(90deg,#10b981,#06b6d4); color: #fff; border: none; }
+
+/* Floating action buttons (SOS / Call / Voice / I'm Safe) */
+.sos-button, .voice-sos-button, .emergency-call-button, .iam-safe-button {
+    position: fixed; bottom: 28px; z-index: 1300; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; text-align: center;
+    color: #fff; border-radius: 999px; width: 88px; height: 88px; box-shadow: 0 14px 36px rgba(15,23,42,0.12);
+}
+
+.sos-button { right: 18px; background: linear-gradient(135deg, #ef4444, #ff6b6b); font-weight: 800; font-size: 1.25rem; width:120px; height:120px; }
+.sos-button:active { transform: scale(0.98); }
+
+.voice-sos-button { right: 150px; background: linear-gradient(135deg, #6366f1, #06b6d4); width:98px; height:98px; font-size:1.05rem; }
+.emergency-call-button { right: 260px; background: linear-gradient(135deg, #10b981, #20bf6b); width:90px; height:90px; font-size:0.98rem; }
+.iam-safe-button { right: 330px; background: linear-gradient(135deg, #1e90ff, #3742fa); width:74px; height:74px; font-size:0.9rem; }
+
+/* small label under icons */
+.sos-button small, .voice-sos-button small, .emergency-call-button small, .iam-safe-button small { display:block; font-size:0.7rem; margin-top:4px; }
+
+/* Map container used on some templates */
+.map-container { height: 400px; border-radius: 10px; border: 1px solid var(--border); background: linear-gradient(180deg, rgba(99,102,241,0.03), rgba(6,182,212,0.02)); }
+
+/* Forms */
+.form-control { border-radius: 8px; border: 1px solid var(--border); }
+.form-control:focus { box-shadow: 0 8px 24px rgba(79,70,229,0.06); border-color: var(--primary-600); }
+.form-label { font-weight: 600; color: var(--subtext); }
+
+/* Alerts */
+.alert { border-radius: 10px; }
+.alert-danger { background: rgba(239,68,68,0.06); color: var(--danger); border-left: 4px solid rgba(239,68,68,0.14); }
+.alert-success { background: rgba(16,185,129,0.06); color: var(--success); border-left: 4px solid rgba(16,185,129,0.12); }
+.alert-warning { background: rgba(245,158,11,0.06); color: var(--warning); border-left: 4px solid rgba(245,158,11,0.12); }
+.alert-info { background: rgba(59,130,246,0.06); color: #2563eb; border-left: 4px solid rgba(59,130,246,0.12); }
+
+/* Dashboard stats */
+.stat-card { background: linear-gradient(135deg, #fff, #f8fafc); border-radius: 12px; padding: 1.25rem; text-align: center; box-shadow: 0 8px 24px rgba(15,23,42,0.04); }
+.stat-number { font-size: 2rem; font-weight: 700; color: var(--primary-600); }
+
+/* Chat */
+.chat-container { height: 500px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.chat-messages { height: 400px; overflow-y: auto; padding: 0.75rem; background: #f8fafc; }
+
+/* Small utilities */
+.text-muted { color: var(--muted); }
+.small { font-size: 0.85rem; }
+
+/* Responsive tweaks */
+@media (max-width: 768px) {
+    .sos-button, .voice-sos-button, .emergency-call-button, .iam-safe-button { width: 72px; height: 72px; }
+    .voice-sos-button { right: 112px; }
+    .emergency-call-button { right: 180px; }
+    .iam-safe-button { right: 252px; }
+    .navbar-brand { font-size: 1.05rem; }
+}
+
+/* Simple pulse animation for SOS button */
+@keyframes pulse {
+    0% { transform: scale(1); box-shadow: 0 8px 24px rgba(239,68,68,0.12); }
+    40% { transform: scale(1.06); box-shadow: 0 26px 64px rgba(239,68,68,0.20); }
+    100% { transform: scale(1); box-shadow: 0 8px 24px rgba(239,68,68,0.12); }
+}
+
+.sos-button { animation: pulse 3s infinite; }
+
+/* Hero section (index) - improved contrast for readability */
+.hero-section {
+    background: linear-gradient(135deg, rgba(11, 78, 160, 0.95), rgba(63, 81, 181, 0.9));
+    color: #fff;
+    border-radius: 12px;
+    padding: 3rem 0;
+    box-shadow: 0 18px 50px rgba(12, 33, 86, 0.25);
+}
+.hero-section .display-4 { font-weight: 800; letter-spacing: -1px; }
+.hero-section .lead { opacity: 0.95; }
+
+/* Nav item entrance animation + hover micro-interactions */
+.main-nav .nav-link { position: relative; transition: transform 0.18s ease, color 0.18s ease; }
+.main-nav .nav-link::after { content: ''; position: absolute; left: 50%; transform: translateX(-50%); bottom: -6px; width: 0; height: 3px; background: rgba(255,255,255,0.18); border-radius: 2px; transition: width 0.22s ease; }
+.main-nav .nav-link:hover { transform: translateY(-4px); color: #fff !important; }
+.main-nav .nav-link:hover::after { width: 50%; }
+
+/* Animated upper option buttons (darkModeToggle, Offline Guide, profile link) */
+.navbar .btn, .profile-link { transition: transform 0.18s ease, box-shadow 0.18s ease; }
+.navbar .btn:hover, .profile-link:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(15,23,42,0.08); }
+
+/* Feature icons - gentle float and hover */
+.feature-icon i { transition: transform 0.35s cubic-bezier(.2,.9,.2,1), color 0.25s ease; display: inline-block; }
+.card:hover .feature-icon i { transform: translateY(-8px) rotate(-6deg) scale(1.06); }
+
+/* Add subtle entrance animation for elements with .fade-in (already used) */
+.fade-in { animation: fadeInUp 1.6s cubic-bezier(.2,.9,.2,1) forwards; opacity: 0; transform: translateY(22px); }
+@keyframes fadeInUp { to { opacity: 1; transform: translateY(0); } }
+
+/* Floating button hover ripple (using pseudo-element) */
+.sos-button::after, .voice-sos-button::after, .emergency-call-button::after, .iam-safe-button::after {
+    content: '';
+    position: absolute;
+    width: 0; height: 0; border-radius: 50%; opacity: 0; pointer-events: none;
+}
+.sos-button:active::after { animation: floatRipple 0.6s ease-out; }
+@keyframes floatRipple { 0% { width: 20px; height: 20px; opacity: 0.35; transform: scale(0.6); } 100% { width: 200px; height: 200px; opacity: 0; transform: scale(1.2); } }
+
+/* Make modals and dropdowns a bit bouncier */
+.modal-content, .dropdown-menu { transition: transform 0.25s ease, opacity 0.2s ease; transform-origin: top center; }
+.modal.fade .modal-dialog { transform: translateY(-10px); transition: transform 0.25s ease; }
+
+/* Improve CTA buttons on index */
+.hero-section .btn { border-radius: 10px; padding: 0.75rem 1.25rem; box-shadow: 0 10px 30px rgba(6,63,129,0.12); }
+
+/* Ensure feature cards have animated icons and small hover lift */
+.card .card-body { transition: transform 0.18s ease; }
+.card:hover .card-body { transform: translateY(-6px); }
+
+
+/* Chat message bubbles (keeps original class names) */
+.message {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border-radius: 10px;
+    max-width: 80%;
+}
+
+.message.sent {
+    background-color: var(--primary-600);
+    color: var(--white);
+    margin-left: auto;
+}
+
+.message.received {
+    background-color: var(--card-bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+
+/* Bulletin Board */
+.bulletin-post {
+    background: var(--white);
+    border-radius: 15px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 3px 15px rgba(0, 0, 0, 0.1);
+    border-left: 5px solid var(--primary-red);
+}
+
+.bulletin-post.urgent {
+    border-left-color: var(--danger-red);
+    background: linear-gradient(135deg, var(--white), rgba(225, 112, 85, 0.05));
+}
+
+.bulletin-post.high {
+    border-left-color: var(--warning-orange);
+}
+
+.bulletin-post.normal {
+    border-left-color: var(--info-blue);
+}
+
+/* Notification Badge */
+.notification-badge {
+    background-color: var(--danger-red);
+    color: var(--white);
+    border-radius: 50%;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    position: absolute;
+    top: -5px;
+    right: -5px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .sos-button {
+        width: 80px;
+        height: 80px;
+        font-size: 1rem;
+        bottom: 20px;
+        right: 20px;
+    }
+    
+    .stat-number {
+        font-size: 2rem;
+    }
+    
+    .navbar-brand {
+        font-size: 1.5rem;
+    }
+}
+
+/* Loading Spinner */
+.spinner {
+    border: 4px solid var(--light-red);
+    border-top: 4px solid var(--primary-red);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Utility Classes */
+.text-primary { color: var(--primary-red) !important; }
+.bg-primary { background-color: var(--primary-red) !important; }
+.border-primary { border-color: var(--primary-red) !important; }
+
+.shadow-sm { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1) !important; }
+.shadow { box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15) !important; }
+.shadow-lg { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2) !important; }
+
+.rounded-lg { border-radius: 15px !important; }
+.rounded-xl { border-radius: 20px !important; }
+
+/* Animation Classes */
+.fade-in {
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.slide-in {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
+}
+
+/* Reveal/collapse helpers */
+.reveal-card .reveal-body {
+    transition: all 0.25s ease;
+}
+.reveal-toggle i {
+    transition: transform 0.2s ease;
+}
+.reveal-toggle.open i {
+    transform: rotate(180deg);
+}
+
+/* Dark Mode */
+/* Dark Mode (improved): set clear surface/text variables and style common components */
+body.dark-mode {
+    /* background and surface */
+    --background-red: #07131a; /* page background */
+    --surface: #0f1b22;        /* main surfaces like cards, modals */
+    --muted-surface: #0b151b;  /* slightly darker surfaces */
+
+    /* text (keep both the descriptive and generic names for compatibility) */
+    --text-dark: #e8eef6;      /* primary readable text on dark */
+    --text-light: #aeb9c4;     /* secondary text */
+    --text: var(--text-dark);  /* generic variable used across the stylesheet */
+    --subtext: var(--text-light);
+    --muted: #8f9aa3;
+
+    /* surfaces / cards */
+    --card-bg: var(--surface); /* generic card/background variable used elsewhere */
+
+    /* borders and accents */
+    --border-color: #20323b;
+    --border: var(--border-color);
+    --card-shadow: rgba(0,0,0,0.5);
+
+    /* keep primary accents (red) but slightly softened on dark */
+    --primary-red: #ff6b6b;
+    --light-red: rgba(255,107,107,0.12);
+
+    /* apply page-level color tokens */
+    color: var(--text);
+    background-color: var(--background-red);
+}
+
+/* Surface elements */
+body.dark-mode .card,
+body.dark-mode .chat-input,
+body.dark-mode .chat-messages,
+body.dark-mode .map-container,
+body.dark-mode .bulletin-post,
+body.dark-mode .list-group-item,
+body.dark-mode .table,
+body.dark-mode .modal-content {
+    background: linear-gradient(180deg, var(--surface), var(--muted-surface));
+    color: var(--text-dark);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 6px 18px var(--card-shadow);
+}
+
+body.dark-mode .card-header {
+    background: linear-gradient(90deg, rgba(255,107,107,0.08), rgba(255,107,107,0.02));
+    color: var(--text-dark);
+}
+
+/* Navbar */
+body.dark-mode .navbar {
+    background: linear-gradient(135deg, #0b1720, #0e1b24);
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+body.dark-mode .navbar-brand { color: var(--text-dark) !important; }
+body.dark-mode .nav-link { color: var(--text-light) !important; }
+body.dark-mode .nav-link:hover { color: var(--text-dark) !important; }
+
+/* Profile link */
+body.dark-mode .profile-link {
+    background: rgba(255,255,255,0.03);
+    color: var(--text-dark) !important;
+}
+
+/* Buttons */
+body.dark-mode .btn-primary {
+    background-color: var(--primary-red);
+    border-color: var(--primary-red);
+    color: #fff;
+}
+body.dark-mode .btn-outline-primary {
+    color: var(--primary-red);
+    border-color: rgba(255,107,107,0.18);
+    background: transparent;
+}
+body.dark-mode .btn-outline-primary:hover {
+    background-color: rgba(255,107,107,0.12);
+    color: #fff;
+}
+
+/* Form controls */
+body.dark-mode .form-control,
+body.dark-mode .form-select,
+body.dark-mode textarea {
+    background-color: rgba(255,255,255,0.03) !important;
+    color: var(--text-dark) !important;
+    border: 1px solid var(--border-color) !important;
+}
+body.dark-mode ::placeholder { color: var(--muted) !important; }
+
+/* Alerts */
+body.dark-mode .alert {
+    background-color: rgba(255,255,255,0.02);
+    color: var(--text-dark);
+    border-left: 4px solid rgba(255,255,255,0.06);
+}
+body.dark-mode .alert-danger { background-color: rgba(225,112,85,0.06); border-left-color: #e17055; }
+body.dark-mode .alert-success { background-color: rgba(0,184,148,0.06); border-left-color: #00b894; }
+
+/* Dropdowns & menus */
+body.dark-mode .dropdown-menu {
+    background: var(--surface);
+    color: var(--text-dark);
+    border: 1px solid var(--border-color);
+}
+body.dark-mode .dropdown-item { color: var(--text-light); }
+body.dark-mode .dropdown-item:hover { background: rgba(255,255,255,0.02); color: var(--text-dark); }
+
+/* Modals */
+body.dark-mode .modal-content { border-radius: 12px; }
+body.dark-mode .modal-header, body.dark-mode .modal-footer { border-color: transparent; }
+
+/* Tables */
+body.dark-mode table { color: var(--text-dark); }
+body.dark-mode thead th { color: var(--text-light); border-bottom: 1px solid var(--border-color); }
+
+/* Toasts */
+body.dark-mode .iam-toast .toast { background: rgba(0,0,0,0.5); color: var(--text-dark); border: 1px solid rgba(255,255,255,0.03); }
+
+/* SOS / Floating buttons tweak for dark */
+body.dark-mode .sos-button { box-shadow: 0 10px 30px rgba(255,71,87,0.12); }
+body.dark-mode .voice-sos-button { box-shadow: 0 10px 30px rgba(116,185,255,0.08); }
+body.dark-mode .emergency-call-button { box-shadow: 0 10px 30px rgba(46,213,115,0.06); }
+body.dark-mode .iam-safe-button { box-shadow: 0 10px 30px rgba(30,144,255,0.06); }
+
+/* Notification badge */
+body.dark-mode .notification-badge { background-color: #ff6b6b; color: #081018; }
+
+/* Ensure high contrast for code blocks and preformatted text */
+body.dark-mode pre, body.dark-mode code { background: #071018; color: var(--text-dark); padding: 8px; border-radius: 6px; }
+
+/* Small helpers to ensure legibility */
+body.dark-mode .small, body.dark-mode small { color: var(--text-light); }
+
+/* Footer */
+body.dark-mode footer { background: #071019 !important; color: var(--text-light); }
